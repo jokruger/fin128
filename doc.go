@@ -19,6 +19,12 @@
 //
 // # Failure
 //
-// Nothing here panics and nothing returns an error from a calculation. A failure is a NaN carrying a reason, read with
-// IsNaN and ErrorDetails, and a NaN input propagates.
+// Nothing here panics, and every calculation returns (dec128.Dec128, error) with a nil error guaranteeing the value is a
+// real number: a NaN never leaves the package. Argument validation returns one of this package's sentinels, such as
+// [ErrRoundingUnset] or [ErrNoBand]; an arithmetic failure - overflow, division by zero, a solver that did not converge
+// - returns dec128's own sentinel for that reason, so errors.Is classifies either kind. On a non-nil error the value is
+// NaN as well, so neither channel can be read alone and miss something, and a NaN argument comes back as the reason it
+// already carried. The exceptions are the operations that cannot fail and so return a single value: the four unit
+// converters are exact scale shifts, and civil uses (Date, bool) and (Date, error) throughout. The rationale for
+// departing from dec128's NaN-carrying model here is recorded with the sentinels themselves.
 package fin128
