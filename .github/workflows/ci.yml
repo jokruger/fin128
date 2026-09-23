@@ -1,0 +1,73 @@
+name: CI
+
+# The suite that runs on every push and pull request. Two things are checked here that a plain
+# `go test ./...` cannot check by itself:
+#
+#   - GOARCH=386 go vet ./... catches a 32-bit-unsafe assumption (a bare int truncating a day
+#     count, for instance) that never shows up on a native amd64/arm64 checkout.
+#   - The probes job, plus diff-probes below it, is the check the library's determinism claim
+#     actually rests on. Passing go test on both amd64 and arm64 is necessary but not sufficient:
+#     a test can assert a property, such as "the fractions tile" or "the schedule sums to the
+#     principal", that holds of two values which differ in the last place. Only comparing the
+#     emitted bytes catches that difference, so the two probe files are compared byte for byte
+#     rather than by re-running the test suite twice and calling both green enough.
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test -count=1 ./...
+      - run: go test -count=1 -shuffle=on ./...
+      - run: make test-globals
+      - run: make lint
+      - name: go vet under GOARCH=386
+        run: GOARCH=386 go vet ./...
+
+  # Emits the probe registry's output on amd64 and on arm64, natively on each architecture - not
+  # cross-compiled - so a difference caused by real hardware behavior (an FMA fusion, a
+  # different libc, anything neither test nor cross-compiled vet would see) has a chance to show
+  # up. diff-probes below is what turns these two artifacts into a pass/fail gate.
+  probes:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: amd64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test -count=1 -run TestEmitProbes -fin128.emit=probes-${{ matrix.arch }}.txt .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: probes-${{ matrix.arch }}
+          path: probes-${{ matrix.arch }}.txt
+
+  # Byte-compares the two probe files. This step is the point of the whole job: it must fail
+  # whenever the files differ, not only when TestEmitProbes itself fails, because a rounding
+  # difference in the last place produces two files that differ while every individual test above
+  # still passes.
+  diff-probes:
+    needs: probes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: probes-amd64
+      - uses: actions/download-artifact@v4
+        with:
+          name: probes-arm64
+      - name: diff amd64 and arm64 probe output
+        run: diff -u probes-amd64.txt probes-arm64.txt

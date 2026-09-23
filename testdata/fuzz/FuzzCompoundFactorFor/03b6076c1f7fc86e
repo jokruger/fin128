@@ -1,0 +1,7 @@
+go test fuzz v1
+int64(378)
+byte('\x01')
+rune('Ò')
+rune('\x1b')
+int32(-38)
+rune('\x05')

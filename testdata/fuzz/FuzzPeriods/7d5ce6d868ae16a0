@@ -1,0 +1,5 @@
+go test fuzz v1
+int64(-117)
+byte('\x11')
+int64(-500)
+int64(25000)

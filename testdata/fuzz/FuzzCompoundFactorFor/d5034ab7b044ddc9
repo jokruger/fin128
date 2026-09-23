@@ -1,0 +1,7 @@
+go test fuzz v1
+int64(500)
+byte('\x00')
+int32(-48)
+rune('Ɠ')
+rune('i')
+rune('\a')
