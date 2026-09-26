@@ -72,19 +72,49 @@ func TestDatedRatesLookup(t *testing.T) {
 	}
 }
 
-// A caller wanting a default tests for ErrNoBand and supplies one. There is deliberately no AtOr
-// taking a fallback argument: the error channel already carries "no band covers this", and handling
-// it at the call site keeps the default visible there rather than buried in the table.
-func TestCallerCanSubstituteADefault(t *testing.T) {
+// A caller wanting a default passes it to AtOr. The fallback stands in for "before the first band"
+// and nothing else: on a covered date the table's rate wins, a zero-value table is still
+// ErrNotBuilt, and a NaN fallback is refused even on a date where it would not be used.
+func TestDatedRatesAtOr(t *testing.T) {
 	table, _ := fin128.NewDatedRates(dateBands())
-	rate, err := table.At(day("2022-01-01"))
-	if errors.Is(err, fin128.ErrNoBand) {
-		rate = dec("0.025")
-	} else if err != nil {
-		t.Fatal(err)
+	fallback := dec("0.025")
+	for _, tc := range []struct{ on, want string }{
+		{"2000-01-01", "0.025"},
+		{"2022-12-31", "0.025"},
+		{"2023-01-01", "0.039"},
+		{"2023-07-01", "0.059"},
+		{"2099-12-31", "0.065"},
+	} {
+		got, err := table.AtOr(day(tc.on), fallback)
+		if err != nil || !got.Equal(dec(tc.want)) {
+			t.Errorf("AtOr(%s) = %s, %v; want %s", tc.on, got.StringFixed(), err, tc.want)
+		}
 	}
-	if !rate.Equal(dec("0.025")) {
-		t.Errorf("the substituted default gave %s, want 0.025", rate.StringFixed())
+	if _, err := (fin128.DatedRates{}).AtOr(day("2023-01-01"), fallback); !errors.Is(err, fin128.ErrNotBuilt) {
+		t.Errorf("AtOr on the zero value gave %v, want ErrNotBuilt", err)
+	}
+	if _, err := table.AtOr(day("2023-08-15"), dec128.NaN(0)); err == nil {
+		t.Error("AtOr accepted a NaN fallback on a covered date")
+	}
+}
+
+func TestDatedRatesApplyOr(t *testing.T) {
+	table, _ := fin128.NewDatedRates(dateBands())
+	for _, tc := range []struct{ on, want string }{
+		{"2022-01-01", "250.00"}, // 10000 * the 2.5% fallback
+		{"2023-08-15", "590.00"}, // 10000 * 5.9%, the table's own rate
+	} {
+		got, err := table.ApplyOr(dec("10000.00"), day(tc.on), dec("0.025"), fin128.Bank(2))
+		if err != nil || got.StringFixed() != tc.want {
+			t.Errorf("ApplyOr(%s) = %s, %v; want %s", tc.on, got.StringFixed(), err, tc.want)
+		}
+	}
+	var unset fin128.Rounding
+	if _, err := table.ApplyOr(dec("10000.00"), day("2022-01-01"), dec("0.025"), unset); !errors.Is(err, fin128.ErrRoundingUnset) {
+		t.Errorf("ApplyOr with an unset Rounding gave %v, want ErrRoundingUnset", err)
+	}
+	if _, err := (fin128.DatedRates{}).ApplyOr(dec("1"), day("2023-01-01"), dec("0"), fin128.Bank(2)); !errors.Is(err, fin128.ErrNotBuilt) {
+		t.Errorf("ApplyOr on the zero value gave %v, want ErrNotBuilt", err)
 	}
 }
 

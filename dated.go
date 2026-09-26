@@ -1,6 +1,7 @@
 package fin128
 
 import (
+	"errors"
 	"slices"
 
 	"github.com/jokruger/dec128"
@@ -11,9 +12,9 @@ import (
 // sequence of rate-change events.
 //
 // It is open at both ends. The table makes no claim about dates before its first band - At reports [ErrNoBand], and a
-// caller wanting a default tests for it and substitutes one, which keeps the default visible at the call site rather
-// than buried in the table. The last band runs forward indefinitely, because a contract's current rate applies until
-// something changes it.
+// caller wanting a default passes one to [DatedRates.AtOr] or [DatedRates.ApplyOr], which keeps the default visible at
+// the call site rather than buried in the table. The last band runs forward indefinitely, because a contract's current
+// rate applies until something changes it.
 //
 // Unlike a tiered table there is no anchor: the first band starts wherever the contract says it does. That asymmetry is
 // deliberate. A tiered table must cover every non-negative amount, since an amount always exists; a dated table covers
@@ -73,6 +74,41 @@ func (d DatedRates) Apply(amount dec128.Dec128, on civil.Date, out Rounding) (de
 		return nan(), ErrRoundingUnset
 	}
 	rate, err := d.At(on)
+	if err != nil {
+		return nan(), err
+	}
+	v := amount.MulRound(rate, out.Scale(), out.Mode())
+	return v, v.ErrorDetails()
+}
+
+// AtOr returns the rate in force on the given date, or fallback when the date is before the first band.
+//
+// It is [DatedRates.At] with the substitution a caller would otherwise write after testing for [ErrNoBand], and it
+// substitutes for that case alone: a zero-value table is still [ErrNotBuilt], because a product with no table has a
+// configuration error and not a rate. A NaN fallback is refused whether or not it would have been used, so the same
+// arguments fail the same way on every date.
+func (d DatedRates) AtOr(on civil.Date, fallback dec128.Dec128) (dec128.Dec128, error) {
+	if fallback.IsNaN() {
+		return nan(), fallback.ErrorDetails()
+	}
+	i, err := d.index(on)
+	switch {
+	case err == nil:
+		return d.bands[i].Rate, nil
+	case errors.Is(err, ErrNoBand):
+		return fallback, nil
+	default:
+		return nan(), err
+	}
+}
+
+// ApplyOr returns amount times the rate [DatedRates.AtOr] finds, rounded once to out: the fallback rate is applied
+// when the date is before the first band.
+func (d DatedRates) ApplyOr(amount dec128.Dec128, on civil.Date, fallback dec128.Dec128, out Rounding) (dec128.Dec128, error) {
+	if !out.IsSet() {
+		return nan(), ErrRoundingUnset
+	}
+	rate, err := d.AtOr(on, fallback)
 	if err != nil {
 		return nan(), err
 	}

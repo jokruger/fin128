@@ -150,10 +150,48 @@ intention.
 a table written by one product's `init` and read by another would make a result depend on link
 order, which is exactly what the determinism claim rules out. Build it, hold it, pass it.
 
+## Tables and names in product configuration
+
+The rate and fee tables are product parameters, so each has a one-line text form that it reads
+with `Parse*` and `UnmarshalText` and writes with `String` and `MarshalText`. A product definition
+therefore decodes straight from JSON or YAML:
+
+```go
+type Savings struct {
+    Rates  fin128.TieredRates   `json:"rates"`  // "0:0.005, 1000:0.007, 10000:0.009"
+    Teaser fin128.DatedRates    `json:"teaser"` // "2026-01-01:0.04, 2026-07-01:0.02"
+    Fee    fin128.DatedCharges  `json:"fee"`    // "2026-01-01:25.00, 2027-01-01:30.00"
+    Wire   fin128.TieredCharges `json:"wire"`   // "0:0.015+2.00, 1000:0.01; min=25, max=500"
+    Rule   fin128.Rule          `json:"rule"`   // "marginal"
+    Basis  daycount.Convention  `json:"basis"`  // "ACT/365"
+}
+```
+
+- **A rate is written as a rate, never as a percent.** The form has no `%` sign, so `"50:50"` would
+  be easy to misread, while `"50:0.5"` can't be.
+- **Numbers are plain decimals, and their digits are kept as written.** `"0.50"` is read at
+  scale 2 and written back as `"0.50"`. A `+`, an exponent, `NaN`, or more than 19 fractional
+  digits is a syntax error. Dates are `YYYY-MM-DD`.
+- **Whitespace means ASCII space only.** Any number of spaces may stand around a separator, and
+  anything else, such as a tab or a newline, is an error. Trailing commas are rejected.
+- **The empty string is the undefined table.** It is the zero value, the same as a JSON `null` or
+  an absent field, and using it for a calculation returns `ErrNotBuilt`.
+- **Parsed text goes through the table's own constructor.** A form that is well-formed but invalid
+  (out of order, or a first tier not at zero) gets the constructor's sentinel. A form that doesn't
+  parse gets `ErrSyntax`, as a `*SyntaxError` carrying the byte offset.
+
+The enumerations a product stores (`Rule`, `Timing`, `Month`, `Weekday`, `Frequency`, `EOMRule` and
+`daycount.Convention`) marshal by name too. Decoding accepts every alias the matching `Parse*`
+documents, and encoding writes the canonical name. A `Convention` resolves through the frozen
+`ByName` table, so an `ACTFixed` convention, which has no name, doesn't marshal. An application
+with its own `NameTable` decodes a plain string and resolves it with that table.
+
+`Rounding` has no text form on purpose. It is a platform setting, not a product parameter.
+
 ## Packages
 
 ```
-fin128/        Rounding, Timing, Rule, the parsers, the exact primitives, unit conversions
+fin128/        Rounding, Timing, Rule, the parsers and table text forms, the exact primitives, unit conversions
   civil/       Date (proleptic Gregorian, no timezone), Month, Weekday, EOMRule, Frequency
   daycount/    DayRule, YearRule, Convention, Fraction, ten named presets + ACTFixed, ByName
 ```

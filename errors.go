@@ -52,6 +52,7 @@ var (
 	ErrSolverSpec     = errors.New("fin128: the solver specification is not usable")
 	ErrEmptyCashflows = errors.New("fin128: the cashflow stream is empty")
 	ErrSalvage        = errors.New("fin128: the salvage value is above the cost")
+	ErrSyntax         = errors.New("fin128: malformed table text")
 )
 
 // nan is the value returned alongside a validation error.

@@ -55,6 +55,8 @@ func TestAccrualPathDoesNotAllocate(t *testing.T) {
 		{"TieredCharges.Charge", func() { _, _ = charges.Charge(dec("60000"), fin128.Marginal, out) }},
 		{"DatedRates.At", func() { _, _ = dated.At(day("2023-08-15")) }},
 		{"DatedRates.Apply", func() { _, _ = dated.Apply(principal, day("2023-08-15"), out) }},
+		{"DatedRates.AtOr", func() { _, _ = dated.AtOr(day("2022-08-15"), rate) }},
+		{"DatedRates.ApplyOr", func() { _, _ = dated.ApplyOr(principal, day("2022-08-15"), rate, out) }},
 		{"AnnuityFactorPV", func() { _, _ = fin128.AnnuityFactorPV(dec("0.005"), 60, fin128.Arrears, out) }},
 		{"AnnuityFactorFV", func() { _, _ = fin128.AnnuityFactorFV(dec("0.005"), 60, fin128.Arrears, out) }},
 		{"Payment", func() { _, _ = fin128.Payment(dec("0.005"), 60, dec("25000"), dec("0"), fin128.Arrears, out) }},

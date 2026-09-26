@@ -1,6 +1,9 @@
 package daycount
 
-import "strings"
+import (
+	"errors"
+	"strings"
+)
 
 // Name lookup for the rules and conventions this package exports.
 //
@@ -202,4 +205,44 @@ func sortStrings(s []string) {
 			s[j], s[j-1] = s[j-1], s[j]
 		}
 	}
+}
+
+// ErrConventionName is returned by Convention's text marshalling for a convention the frozen name table has no name
+// for, and for text ByName does not resolve.
+var ErrConventionName = errors.New("daycount: not a named convention")
+
+// Name returns the canonical name ByName resolves to c, such as "ACT/365" or "30E-ISDA/360", and false for a convention
+// the frozen table does not name - ACTFixed, or any hand-composed DayRule and YearRule pair.
+//
+// It is not String. String writes the numerator/denominator form of any convention, which is right for a log line and
+// wrong for a stored product: "30G/360" is String's form of Thirty360German, and ByName reads it only as an alias.
+func (c Convention) Name() (string, bool) {
+	for _, nc := range namedConventions {
+		if nc.build() == c {
+			return nc.canonical, true
+		}
+	}
+	return "", false
+}
+
+// MarshalText implements encoding.TextMarshaler with the convention's canonical name. A convention with no name is
+// [ErrConventionName]; one built with ACTFixed has to be stored as its parts.
+func (c Convention) MarshalText() ([]byte, error) {
+	name, ok := c.Name()
+	if !ok {
+		return nil, ErrConventionName
+	}
+	return []byte(name), nil
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler with the frozen [ByName] table, and so accepts every alias it
+// documents. An application that layers its own names through NewNameTable decodes a plain string instead and resolves
+// it with its own table: a method cannot be told which table to use.
+func (c *Convention) UnmarshalText(b []byte) error {
+	v, ok := ByName(string(b))
+	if !ok {
+		return ErrConventionName
+	}
+	*c = v
+	return nil
 }

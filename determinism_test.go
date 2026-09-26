@@ -264,6 +264,18 @@ var probes = []probe{
 		return text(t.Apply(dec128.FromString("10000.00"), civil.MustParse("2023-08-15"), fin128.Bank(2))) + ";" +
 			text(t.At(civil.MustParse("2022-01-01")))
 	}},
+	{"dated/at-or-and-apply-or", func() string {
+		t, err := fin128.NewDatedRates([]fin128.DatedRateBand{
+			{From: civil.MustParse("2023-01-01"), Rate: dec128.FromString("0.039")},
+		})
+		if err != nil {
+			return "err:" + err.Error()
+		}
+		fallback := dec128.FromString("0.0125")
+		return text(t.AtOr(civil.MustParse("2022-01-01"), fallback)) + ";" +
+			text(t.ApplyOr(dec128.FromString("10000.00"), civil.MustParse("2022-01-01"), fallback, fin128.Bank(2))) + ";" +
+			text(t.ApplyOr(dec128.FromString("10000.00"), civil.MustParse("2023-01-01"), fallback, fin128.Bank(2)))
+	}},
 	{"dated/accrue-one-and-parts", func() string {
 		t, err := fin128.NewDatedRates([]fin128.DatedRateBand{
 			{From: civil.MustParse("2023-01-01"), Rate: dec128.FromString("0.039")},
@@ -561,6 +573,39 @@ var probes = []probe{
 		return first.String() + ";" + second.String() + ";" + sum.String() + ";" +
 			itoa64(sn) + "/" + itoa64(sd) + ";" + itoa64(wn) + "/" + itoa64(wd)
 	}},
+	{"text/tiered-rates", func() string {
+		// The text form is what a stored product is, so what it writes back must not move with SetTrimOutput: the
+		// trailing zeros of "0.0050" are part of the stored digits.
+		tbl, err := fin128.ParseTieredRates("0:0.0050, 1000.00:0.007, 10000:-0.0010")
+		if err != nil {
+			return "err:" + err.Error()
+		}
+		return tbl.String() + ";" + text(tbl.Accrue(dec128.FromString("25000.00"),
+			daycount.ACT365F().YearFraction(civil.MustParse("2024-01-01"), civil.MustParse("2024-02-01")),
+			fin128.Marginal, fin128.Bank(2)))
+	}},
+	{"text/dated-rates-and-charges", func() string {
+		r, err := fin128.ParseDatedRates("2000-01-01:0.50, 2000-06-01:0.7000")
+		if err != nil {
+			return "err:" + err.Error()
+		}
+		c, err := fin128.ParseDatedCharges("2024-01-01:25.00, 2025-01-01:30")
+		if err != nil {
+			return "err:" + err.Error()
+		}
+		return r.String() + ";" + c.String()
+	}},
+	{"text/tiered-charges", func() string {
+		tbl, err := fin128.ParseTieredCharges("0:0.0150+2.00, 1000:0.010-0.50; max=500.00, min=25")
+		if err != nil {
+			return "err:" + err.Error()
+		}
+		return tbl.String() + ";" + text(tbl.Charge(dec128.FromString("5000.00"), fin128.Marginal, fin128.HalfUp(2)))
+	}},
+	{"text/syntax-error", func() string {
+		_, err := fin128.ParseTieredRates("0:0.5, 1000:0.7,")
+		return "err:" + err.Error()
+	}},
 }
 
 // itoa64 formats a signed integer without Sprintf, which on a Dec128 would read SetTrimOutput. It
@@ -624,8 +669,8 @@ func TestGlobalIndependence(t *testing.T) {
 func TestProbeRegistryIsNotVacuous(t *testing.T) {
 	// The floor rises whenever probes are added, and never falls: it is what makes deleting a
 	// probe a test failure rather than a quiet loss of CI coverage. It stands at the number of
-	// probes the registry currently holds - 24 after plan 1, 39 after plan 2, 52 after plan 3, 64 after plan 4, 71 after plan 5.
-	if len(probes) < 71 {
+	// probes the registry currently holds - 24 after plan 1, 39 after plan 2, 52 after plan 3, 64 after plan 4, 71 after plan 5, 75 after the text forms, 76 after AtOr.
+	if len(probes) < 76 {
 		t.Fatalf("probe registry has %d entries; every stage must add its own", len(probes))
 	}
 	seen := make(map[string]string, len(probes))

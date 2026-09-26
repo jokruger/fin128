@@ -134,3 +134,42 @@ func ParseRoundingMode(name string) (dec128.RoundingMode, bool) {
 		return 0, false
 	}
 }
+
+// MarshalText implements encoding.TextMarshaler with the timing's name. An invalid timing is [ErrTiming], rather than
+// the text "invalid" that String returns and nothing reads back.
+func (t Timing) MarshalText() ([]byte, error) {
+	if !t.IsValid() {
+		return nil, ErrTiming
+	}
+	return []byte(t.String()), nil
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler with [ParseTiming], and so accepts the same names. Text it does not
+// recognise, including the empty string, is [ErrTiming].
+func (t *Timing) UnmarshalText(b []byte) error {
+	v, ok := ParseTiming(string(b))
+	if !ok {
+		return ErrTiming
+	}
+	*t = v
+	return nil
+}
+
+// MarshalText implements encoding.TextMarshaler with the rule's name. An invalid rule is [ErrRule].
+func (r Rule) MarshalText() ([]byte, error) {
+	if !r.IsValid() {
+		return nil, ErrRule
+	}
+	return []byte(r.String()), nil
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler with [ParseRule], and so accepts the same names. Text it does not
+// recognise, including the empty string, is [ErrRule].
+func (r *Rule) UnmarshalText(b []byte) error {
+	v, ok := ParseRule(string(b))
+	if !ok {
+		return ErrRule
+	}
+	*r = v
+	return nil
+}
