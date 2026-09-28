@@ -23,7 +23,7 @@ const (
 
 var eomRuleNames = [...]string{
 	"clamp",
-	"last-day",
+	"last_day",
 }
 
 // IsValid reports whether r names an end-of-month rule.

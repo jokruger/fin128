@@ -87,7 +87,7 @@ func TestEnumsInJSON(t *testing.T) {
 		Frequency civil.Frequency `json:"frequency"`
 		EOM       civil.EOMRule   `json:"eom"`
 	}
-	in := `{"month":"March","weekday":"Friday","frequency":"monthly","eom":"last-day"}`
+	in := `{"month":"March","weekday":"Friday","frequency":"monthly","eom":"last_day"}`
 	var s schedule
 	if err := json.Unmarshal([]byte(in), &s); err != nil {
 		t.Fatal(err)
